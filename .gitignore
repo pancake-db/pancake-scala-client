@@ -1,0 +1,7 @@
+.idea
+target
+lib
+project/target
+native/target
+**/.bsp
+**/resources/native

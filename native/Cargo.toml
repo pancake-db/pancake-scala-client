@@ -1,0 +1,15 @@
+[package]
+name = "pancake-scala-client-core"
+version = "0.0.0"
+authors = ["mwlon <m.w.loncaric@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+jni = "0.19"
+pancake-db-idl = {path= "../../pancake-idl/rust" }
+pancake-db-core = {path= "../../pancake-core/core" }
+protobuf = {git="https://github.com/stepancheg/rust-protobuf", rev="b3fe22932968995779e4046189becdf7be82ba1d"}
+q_compress = {path= "../../../opensource/quantile-compression" }
+
+[lib]
+crate-type = ["cdylib"]

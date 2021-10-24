@@ -9,7 +9,7 @@ jni = "0.19"
 pancake-db-idl = {path= "../../pancake-idl/rust" }
 pancake-db-core = {path= "../../pancake-core/core" }
 protobuf = {git="https://github.com/stepancheg/rust-protobuf", rev="b3fe22932968995779e4046189becdf7be82ba1d"}
-q_compress = {path= "../../../opensource/quantile-compression" }
+q_compress = "0.3.1"
 
 [lib]
 crate-type = ["cdylib"]

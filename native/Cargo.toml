@@ -1,14 +1,14 @@
 [package]
-name = "pancake-scala-client-core"
+name = "pancake-scala-client-native"
 version = "0.0.0"
-authors = ["mwlon <m.w.loncaric@gmail.com>"]
+authors = ["PancakeDB <inquiries@pancakedb.com>"]
 edition = "2018"
 
 [dependencies]
 jni = "0.19"
-pancake-db-idl = {path= "../../pancake-idl/rust" }
-pancake-db-core = {path= "../../pancake-core/core" }
-protobuf = {git="https://github.com/stepancheg/rust-protobuf", rev="b3fe22932968995779e4046189becdf7be82ba1d"}
+pancake-db-idl = "0.0.0-alpha.0"
+pancake-db-core = "0.0.0-alpha.0"
+protobuf = "3.0.0-alpha.1"
 q_compress = "0.3.1"
 
 [lib]

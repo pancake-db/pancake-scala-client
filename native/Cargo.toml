@@ -3,6 +3,7 @@ name = "pancake-scala-client-native"
 version = "0.0.0"
 authors = ["PancakeDB <inquiries@pancakedb.com>"]
 edition = "2018"
+include = ["src"]
 
 [dependencies]
 jni = "0.19"

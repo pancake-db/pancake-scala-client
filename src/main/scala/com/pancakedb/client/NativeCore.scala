@@ -2,7 +2,7 @@ package com.pancakedb.client
 
 import com.github.sbt.jni.syntax.NativeLoader
 
-private[client] object NativeCore extends NativeLoader("pancake_scala_client_core") {
+private[client] object NativeCore extends NativeLoader("pancake_scala_client_native") {
   case class LongColumn(atoms: Array[Long], repLevels: Array[Byte])
     extends NativeRepLevelsColumn[Long]
   case class BooleanColumn(atoms: Array[Boolean], repLevels: Array[Byte])

@@ -111,7 +111,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pancake-scala-client-core"
+name = "pancake-scala-client-native"
 version = "0.0.0"
 dependencies = [
  "jni",

@@ -1,6 +1,6 @@
 name := "pancake-db-client"
 
-version := "0.0.0-alpha.0"
+version := "0.0.0-alpha.0-full"
 
 scalaVersion := "2.12.14"
 

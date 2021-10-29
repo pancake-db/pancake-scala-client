@@ -29,6 +29,12 @@ api.createTable(req: CreateTableRequest): CreateTableResponse
 api.dropTable(req: DropTableRequest): DropTableResponse
 ```
 
+### Get Schema
+```
+api.getSchema(req: GetSchemaRequest): GetSchemaResponse
+```
+
+
 ### List Segments
 ```
 api.listSegments(req: ListSegmentsRequest): ListSegmentsResponse

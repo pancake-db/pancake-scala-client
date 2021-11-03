@@ -1,6 +1,6 @@
 [![Maven Central][maven-badge]][maven-url]
 
-[maven-badge]: https://maven-badges.herokuapp.com/maven-central/com.pancakedb/pancake-db-client_2.12/badge.svg
+[maven-badge]: https://maven-badges.herokuapp.com/maven-central/com.pancakedb/pancake-db-client_2.12/badge.svg?gav=true
 [maven-url]: https://search.maven.org/artifact/com.pancakedb/pancake-db-client_2.12
 
 # Usage

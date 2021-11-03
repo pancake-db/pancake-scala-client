@@ -1,4 +1,27 @@
+[![Maven Central][maven-badge]][maven-url]
+
+[maven-badge]: https://maven-badges.herokuapp.com/maven-central/com.pancakedb/pancake-db-client_2.12/badge.svg
+[maven-url]: https://search.maven.org/artifact/com.pancakedb/pancake-db-client_2.12
+
 # Usage
+
+## Requirements
+
+Note that this library leverages PancakeDB Core,
+a native rust library that needs to be compiled for each
+architecture and OS.
+The main release of this library pre-builds for some of these.
+Therefore you will need to run on one of them:
+* Darwin (Mac)
+* x86_64 Linux, glibc>=2.31
+* aarch64 Linux, glibc>=2.31
+
+or compile your native binary and include it in your `resources/native/$ARCHITECTURE-$OS/libpancake_scala_client_native.$SUFFIX`.
+
+You can add this client to your `build.sbt` or equivalent via something like
+`libraryDependencies += "com.pancakedb" %% "pancake-db-client" % "0.0.0-alpha.0-full"`
+
+## Creating a Client
 
 Create a client instance via
 ```
@@ -106,3 +129,16 @@ client.decodeSegment(
   columnMetas: Array[ColumnMeta],
 ): Array[Row]
 ```
+
+# Development
+
+## Native Code
+
+If you change any native interface code (the functions in `NativeCore.scala`),
+run `sbt javah` to generate the necessary header files.
+See [the JNI plugin](https://github.com/sbt/sbt-jni).
+
+Working on a Mac, you can build the current set of pre-built binaries
+by `cd`'ing into `native/` and running `sh build_all_from_darwin.sh`.
+This builds the native rust code locally, then builds an Ubuntu docker image,
+enters it, and builds the native rust code for x86_64 and aarch64 Linux.

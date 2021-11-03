@@ -9,7 +9,7 @@ include = ["src"]
 jni = "0.19"
 pancake-db-idl = "0.0.0-alpha.0"
 pancake-db-core = "0.0.0-alpha.0"
-protobuf = "3.0.0-alpha.1"
+protobuf = "=3.0.0-alpha.1"
 q_compress = "0.3.1"
 
 [lib]

@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:16.04
 MAINTAINER PancakeDB <inquiries@pancakedb.com>
 
 RUN apt-get update && apt-get install -y \

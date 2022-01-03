@@ -7,6 +7,8 @@ private[client] object NativeCore extends NativeLoader("pancake_scala_client_nat
     extends NativeRepLevelsColumn[Long]
   case class BooleanColumn(atoms: Array[Boolean], repLevels: Array[Byte])
     extends NativeRepLevelsColumn[Boolean]
+  case class FloatColumn(atoms: Array[Float], repLevels: Array[Byte])
+    extends NativeRepLevelsColumn[Float]
   case class DoubleColumn(atoms: Array[Double], repLevels: Array[Byte])
     extends NativeRepLevelsColumn[Double]
   case class StringOrBytesColumn(atoms: Array[Byte], repLevels: Array[Byte])
@@ -17,7 +19,6 @@ private[client] object NativeCore extends NativeLoader("pancake_scala_client_nat
     nestedListDepth: Byte,
     compressedBytes: Array[Byte],
     uncompressedBytes: Array[Byte],
-    limit: Int,
     codec: String,
   ): LongColumn
 
@@ -26,17 +27,22 @@ private[client] object NativeCore extends NativeLoader("pancake_scala_client_nat
     nestedListDepth: Byte,
     compressedBytes: Array[Byte],
     uncompressedBytes: Array[Byte],
-    limit: Int,
     codec: String,
   ): BooleanColumn
 
+  @native
+  def decodeFloat32s(
+    nestedListDepth: Byte,
+    compressedBytes: Array[Byte],
+    uncompressedBytes: Array[Byte],
+    codec: String,
+  ): FloatColumn
 
   @native
   def decodeFloat64s(
     nestedListDepth: Byte,
     compressedBytes: Array[Byte],
     uncompressedBytes: Array[Byte],
-    limit: Int,
     codec: String,
   ): DoubleColumn
 
@@ -47,7 +53,6 @@ private[client] object NativeCore extends NativeLoader("pancake_scala_client_nat
     nestedListDepth: Byte,
     compressedBytes: Array[Byte],
     uncompressedBytes: Array[Byte],
-    limit: Int,
     codec: String,
   ): LongColumn
 
@@ -57,7 +62,11 @@ private[client] object NativeCore extends NativeLoader("pancake_scala_client_nat
     nestedListDepth: Byte,
     compressedBytes: Array[Byte],
     uncompressedBytes: Array[Byte],
-    limit: Int,
     codec: String,
   ): StringOrBytesColumn
+
+  @native
+  def decodeDeletions(
+    data: Array[Byte],
+  ): Array[Boolean]
 }

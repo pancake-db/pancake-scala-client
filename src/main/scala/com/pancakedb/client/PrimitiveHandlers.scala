@@ -5,6 +5,7 @@ import Exceptions.UnrecognizedDataTypeException
 import com.pancakedb.idl.{DataType, FieldValue}
 
 import java.nio.charset.StandardCharsets
+import scala.collection.mutable.ArrayBuffer
 
 object PrimitiveHandlers {
   def getHandler(dtype: DataType): PrimitiveHandler[_, _] = {
@@ -12,6 +13,7 @@ object PrimitiveHandlers {
       case DataType.INT64 => Int64Handler
       case DataType.STRING => StringHandler
       case DataType.BOOL => BoolHandler
+      case DataType.FLOAT32 => Float32Handler
       case DataType.FLOAT64 => Float64Handler
       case DataType.TIMESTAMP_MICROS => TimestampMicrosHandler
       case DataType.BYTES => BytesHandler
@@ -25,14 +27,12 @@ object PrimitiveHandlers {
       nestedListDepth: Byte,
       compressedBytes: Array[Byte],
       uncompressedBytes: Array[Byte],
-      limit: Int,
       codec: String
     ): NativeRepLevelsColumn[Long] = {
       NativeCore.decodeInt64s(
         nestedListDepth,
         compressedBytes,
         uncompressedBytes,
-        limit,
         codec,
       )
     }
@@ -40,6 +40,7 @@ object PrimitiveHandlers {
     override def setValue(p: Long, builder: FieldValue.Builder): Unit = {
       builder.setInt64Val(p)
     }
+    override def makeAtomArray(buffer: ArrayBuffer[Long]): Array[Long] = buffer.toArray
   }
 
   object BoolHandler extends PrimitiveHandler[Boolean, Boolean] {
@@ -48,14 +49,12 @@ object PrimitiveHandlers {
       nestedListDepth: Byte,
       compressedBytes: Array[Byte],
       uncompressedBytes: Array[Byte],
-      limit: Int,
       codec: String
     ): NativeRepLevelsColumn[Boolean] = {
       NativeCore.decodeBools(
         nestedListDepth,
         compressedBytes,
         uncompressedBytes,
-        limit,
         codec,
       )
     }
@@ -63,6 +62,29 @@ object PrimitiveHandlers {
     override def setValue(p: Boolean, builder: FieldValue.Builder): Unit = {
       builder.setBoolVal(p)
     }
+    override def makeAtomArray(buffer: ArrayBuffer[Boolean]): Array[Boolean] = buffer.toArray
+  }
+
+  object Float32Handler extends PrimitiveHandler[Float, Float] {
+    override val isAtomic: Boolean = true
+    override def decodeNativeRepLevelsColumn(
+      nestedListDepth: Byte,
+      compressedBytes: Array[Byte],
+      uncompressedBytes: Array[Byte],
+      codec: String
+    ): NativeRepLevelsColumn[Float] = {
+      NativeCore.decodeFloat32s(
+        nestedListDepth,
+        compressedBytes,
+        uncompressedBytes,
+        codec,
+      )
+    }
+    override def atomToPrimitive(atom: Float): Float = atom
+    override def setValue(p: Float, builder: FieldValue.Builder): Unit = {
+      builder.setFloat32Val(p)
+    }
+    override def makeAtomArray(buffer: ArrayBuffer[Float]): Array[Float] = buffer.toArray
   }
 
   object Float64Handler extends PrimitiveHandler[Double, Double] {
@@ -71,14 +93,12 @@ object PrimitiveHandlers {
       nestedListDepth: Byte,
       compressedBytes: Array[Byte],
       uncompressedBytes: Array[Byte],
-      limit: Int,
       codec: String
     ): NativeRepLevelsColumn[Double] = {
       NativeCore.decodeFloat64s(
         nestedListDepth,
         compressedBytes,
         uncompressedBytes,
-        limit,
         codec,
       )
     }
@@ -86,6 +106,7 @@ object PrimitiveHandlers {
     override def setValue(p: Double, builder: FieldValue.Builder): Unit = {
       builder.setFloat64Val(p)
     }
+    override def makeAtomArray(buffer: ArrayBuffer[Double]): Array[Double] = buffer.toArray
   }
 
   object TimestampMicrosHandler extends PrimitiveHandler[Long, Timestamp] {
@@ -94,14 +115,12 @@ object PrimitiveHandlers {
       nestedListDepth: Byte,
       compressedBytes: Array[Byte],
       uncompressedBytes: Array[Byte],
-      limit: Int,
       codec: String
     ): NativeRepLevelsColumn[Long] = {
       NativeCore.decodeTimestamps(
         nestedListDepth,
         compressedBytes,
         uncompressedBytes,
-        limit,
         codec,
       )
     }
@@ -114,6 +133,7 @@ object PrimitiveHandlers {
     override def setValue(p: Timestamp, builder: FieldValue.Builder): Unit = {
       builder.setTimestampVal(p)
     }
+    override def makeAtomArray(buffer: ArrayBuffer[Long]): Array[Long] = buffer.toArray
   }
 
   object BytesHandler extends PrimitiveHandler[Byte, Array[Byte]] {
@@ -122,7 +142,6 @@ object PrimitiveHandlers {
       nestedListDepth: Byte,
       compressedBytes: Array[Byte],
       uncompressedBytes: Array[Byte],
-      limit: Int,
       codec: String
     ): NativeRepLevelsColumn[Byte] = {
       NativeCore.decodeStringOrBytes(
@@ -130,7 +149,6 @@ object PrimitiveHandlers {
         nestedListDepth,
         compressedBytes,
         uncompressedBytes,
-        limit,
         codec,
       )
     }
@@ -138,6 +156,7 @@ object PrimitiveHandlers {
     override def setValue(p: Array[Byte], builder: FieldValue.Builder): Unit = {
       builder.setBytesVal(ByteString.copyFrom(p))
     }
+    override def makeAtomArray(buffer: ArrayBuffer[Byte]): Array[Byte] = buffer.toArray
   }
 
   object StringHandler extends PrimitiveHandler[Byte, String] {
@@ -146,7 +165,6 @@ object PrimitiveHandlers {
       nestedListDepth: Byte,
       compressedBytes: Array[Byte],
       uncompressedBytes: Array[Byte],
-      limit: Int,
       codec: String
     ): NativeRepLevelsColumn[Byte] = {
       NativeCore.decodeStringOrBytes(
@@ -154,7 +172,6 @@ object PrimitiveHandlers {
         nestedListDepth,
         compressedBytes,
         uncompressedBytes,
-        limit,
         codec,
       )
     }
@@ -162,5 +179,6 @@ object PrimitiveHandlers {
     override def setValue(p: String, builder: FieldValue.Builder): Unit = {
       builder.setStringVal(p)
     }
+    override def makeAtomArray(buffer: ArrayBuffer[Byte]): Array[Byte] = buffer.toArray
   }
 }

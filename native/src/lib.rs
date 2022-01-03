@@ -1,25 +1,23 @@
 use jni::JNIEnv;
 use jni::objects::{JClass, JString, JValue};
-use jni::sys::{jbyteArray, jint, jobject, jsize, jbyte};
+use jni::sys::{jbyte, jbooleanArray, jbyteArray, jobject, jsize};
 use pancake_db_core::{RepLevelsAndAtoms, RepLevelsAndBytes};
 use pancake_db_core::compression::ValueCodec;
-use pancake_db_core::encoding::{DecoderImpl, Decoder};
+use pancake_db_core::encoding::{Decoder, DecoderImpl};
 use pancake_db_core::primitives::Primitive;
 use q_compress::TimestampMicros;
+use pancake_db_core::deletion::decompress_deletions;
 
 fn decode_column<P: Primitive>(
   env: JNIEnv,
   nesting_depth: jbyte,
   compressed_bytes: jbyteArray,
   uncompressed_bytes: jbyteArray,
-  limit: jint,
   codec: JString,
   class_name: &str,
   signature: &str,
   create_jni_array_fn: &dyn Fn(&JNIEnv, &[P::A]) -> jobject,
 ) -> jobject {
-  // Currently we don't actually limit to limit. Instead
-  // only the uncompressed data is limited. This could be optimized.
   // DECOMPRESS
   let bytes = env.convert_byte_array(compressed_bytes).unwrap();
   let mut atoms = Vec::new();
@@ -44,7 +42,7 @@ fn decode_column<P: Primitive>(
   if !bytes.is_empty() {
     let decoder = DecoderImpl::<P, RepLevelsAndAtoms<P::A>>::new(nesting_depth as u8);
     let decoded = decoder
-      .decode_limited(&bytes, limit as usize)
+      .decode(&bytes)
       .expect("unable to decode uncompressed bytes; data may be corrupt");
     for RepLevelsAndAtoms { levels, atoms: uncompressed_atoms } in &decoded {
       rep_levels.extend(levels);
@@ -71,7 +69,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeInt64s(
   nesting_depth: jbyte,
   compressed_bytes: jbyteArray,
   uncompressed_bytes: jbyteArray,
-  limit: jint,
   codec: JString,
 ) -> jobject {
   fn create_jni_array(env: &JNIEnv, atoms: &[i64]) -> jobject {
@@ -86,7 +83,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeInt64s(
     nesting_depth,
     compressed_bytes,
     uncompressed_bytes,
-    limit,
     codec,
     "com/pancakedb/client/NativeCore$LongColumn",
     "([J[B)V",
@@ -101,7 +97,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeBools(
   nesting_depth: jbyte,
   compressed_bytes: jbyteArray,
   uncompressed_bytes: jbyteArray,
-  limit: jint,
   codec: JString,
 ) -> jobject {
   fn create_jni_array(env: &JNIEnv, atoms: &[bool]) -> jobject {
@@ -119,7 +114,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeBools(
     nesting_depth,
     compressed_bytes,
     uncompressed_bytes,
-    limit,
     codec,
     "com/pancakedb/client/NativeCore$BooleanColumn",
     "([Z[B)V",
@@ -134,7 +128,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeFloat64s
   nesting_depth: jbyte,
   compressed_bytes: jbyteArray,
   uncompressed_bytes: jbyteArray,
-  limit: jint,
   codec: JString,
 ) -> jobject {
   fn create_jni_array(env: &JNIEnv, atoms: &[f64]) -> jobject {
@@ -149,7 +142,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeFloat64s
     nesting_depth,
     compressed_bytes,
     uncompressed_bytes,
-    limit,
     codec,
     "com/pancakedb/client/NativeCore$DoubleColumn",
     "([D[B)V",
@@ -164,7 +156,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeTimestam
   nesting_depth: jbyte,
   compressed_bytes: jbyteArray,
   uncompressed_bytes: jbyteArray,
-  limit: jint,
   codec: JString,
 ) -> jobject {
   fn create_jni_array(env: &JNIEnv, atoms: &[TimestampMicros]) -> jobject {
@@ -186,7 +177,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeTimestam
     nesting_depth,
     compressed_bytes,
     uncompressed_bytes,
-    limit,
     codec,
     "com/pancakedb/client/NativeCore$LongColumn",
     "([J[B)V",
@@ -202,7 +192,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeStringOr
   nesting_depth: jbyte,
   compressed_bytes: jbyteArray,
   uncompressed_bytes: jbyteArray,
-  limit: jint,
   codec: JString,
 ) -> jobject {
   fn create_jni_array(env: &JNIEnv, atoms: &[u8]) -> jobject {
@@ -218,7 +207,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeStringOr
       nesting_depth,
       compressed_bytes,
       uncompressed_bytes,
-      limit,
       codec,
       "com/pancakedb/client/NativeCore$StringOrBytesColumn",
       "([B[B)V",
@@ -230,7 +218,6 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeStringOr
       nesting_depth,
       compressed_bytes,
       uncompressed_bytes,
-      limit,
       codec,
       "com/pancakedb/client/NativeCore$StringOrBytesColumn",
       "([B[B)V",
@@ -239,3 +226,24 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeStringOr
   }
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeDeletions(
+  env: JNIEnv,
+  _: JClass,
+  data: jbyteArray,
+) -> jbooleanArray {
+  let bytes = env.convert_byte_array(data)
+    .unwrap();
+
+  let deletions_as_bytes: Vec<_> = decompress_deletions(bytes)
+    .expect("corrupt deletion data")
+    .iter()
+    .map(|&b| b as u8)
+    .collect();
+
+  let res = env.new_boolean_array(deletions_as_bytes.len() as jsize)
+    .expect("unable to allocate jbooleanArray for deletions");
+  env.set_boolean_array_region(res, 0, &deletions_as_bytes)
+    .expect("unable to assign jbooleanArray for deletions");
+  res
+}

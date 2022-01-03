@@ -5,3 +5,4 @@ project/target
 native/target
 **/.bsp
 **/resources/native
+**/*.iml

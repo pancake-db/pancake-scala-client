@@ -1,9 +1,7 @@
 package com.pancakedb.client
 
-import NativeCore.{BooleanColumn, StringOrBytesColumn}
-import PrimitiveHandlers.{BoolHandler, StringHandler}
-import com.pancakedb.idl.{FieldValue, RepeatedFieldValue}
 import com.pancakedb.client.PrimitiveHandlers.{BoolHandler, StringHandler}
+import com.pancakedb.idl.{FieldValue, RepeatedFieldValue}
 
 class AtomNesterTest extends TestBase {
   val boolColumn: RepLevelsColumn[Boolean] = RepLevelsColumn(

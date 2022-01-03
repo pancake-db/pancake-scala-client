@@ -12,6 +12,7 @@ import org.apache.http.impl.client.HttpClientBuilder
 
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -96,11 +97,7 @@ case class PancakeClient(host: String, port: Int) {
       val respBuilder = ReadSegmentColumnResponse.newBuilder()
       val extraBytes = jsonRequest(HttpGet.METHOD_NAME, "read_segment_column", req, respBuilder)
       val byteString = ByteString.copyFrom(extraBytes.get)
-      if (respBuilder.getCodec.isEmpty) {
-        respBuilder.setUncompressedData(byteString)
-      } else {
-        respBuilder.setCompressedData(byteString)
-      }
+      respBuilder.setData(byteString)
       respBuilder.build()
     }
 
@@ -109,15 +106,36 @@ case class PancakeClient(host: String, port: Int) {
       jsonRequest(HttpPost.METHOD_NAME, "write_to_partition", req, respBuilder)
       respBuilder.build()
     }
+
+    def readSegmentDeletions(req: ReadSegmentDeletionsRequest): ReadSegmentDeletionsResponse = {
+      val respBuilder = ReadSegmentDeletionsResponse.newBuilder()
+      val extraBytes = jsonRequest(HttpGet.METHOD_NAME, "read_segment_deletions", req, respBuilder)
+      val byteString = ByteString.copyFrom(extraBytes.get)
+      respBuilder.setData(byteString)
+      respBuilder.build()
+    }
+
+    def deleteFromSegment(req: DeleteFromSegmentRequest): DeleteFromSegmentResponse = {
+      val respBuilder = DeleteFromSegmentResponse.newBuilder()
+      jsonRequest(HttpPost.METHOD_NAME, "delete_from_segment", req, respBuilder)
+      respBuilder.build()
+    }
+
+    def alterTable(req: AlterTableRequest): AlterTableResponse = {
+      val respBuilder = AlterTableResponse.newBuilder()
+      jsonRequest(HttpPost.METHOD_NAME, "alter_table", req, respBuilder)
+      respBuilder.build()
+    }
   }
 
-  def readSegmentRawColumn(
+  private def readSegmentRawColumn(
     tableName: String,
-    partition: ArrayBuffer[PartitionField],
+    partition: Map[String, PartitionFieldValue],
     segmentId: String,
-    columnMeta: ColumnMeta
+    columnName: String,
+    columnMeta: ColumnMeta,
+    correlationId: String,
   ): RawColumn = {
-    val columnName = columnMeta.getName
     var continuation = ""
     var first = true
 
@@ -130,8 +148,9 @@ case class PancakeClient(host: String, port: Int) {
       val req = ReadSegmentColumnRequest.newBuilder()
         .setTableName(tableName)
         .setSegmentId(segmentId)
-        .addAllPartition(partition.asJava)
+        .putAllPartition(partition.asJava)
         .setColumnName(columnName)
+        .setCorrelationId(correlationId)
         .setContinuationToken(continuation)
         .build()
       val resp = Api.readSegmentColumn(req)
@@ -141,9 +160,9 @@ case class PancakeClient(host: String, port: Int) {
       }
       if (resp.getCodec.nonEmpty) {
         codec = resp.getCodec
-        compressedBytes ++= resp.getCompressedData.toByteArray
+        compressedBytes ++= resp.getData.toByteArray
       } else {
-        uncompressedBytes ++= resp.getUncompressedData.toByteArray
+        uncompressedBytes ++= resp.getData.toByteArray
       }
 
       first = false
@@ -159,77 +178,117 @@ case class PancakeClient(host: String, port: Int) {
     )
   }
 
+  def decodeSegmentDeletions(
+    tableName: String,
+    partition: Map[String, PartitionFieldValue],
+    segmentId: String,
+    correlationId: String,
+  ): Array[Boolean] = {
+    val req = ReadSegmentDeletionsRequest.newBuilder()
+      .setTableName(tableName)
+      .putAllPartition(partition.asJava)
+      .setSegmentId(segmentId)
+      .setCorrelationId(correlationId)
+      .build()
+    val resp = this.Api.readSegmentDeletions(req)
+    val bytes = resp.getData.toByteArray
+    // TODO get rid of this check once core library handles it instead
+    if (bytes.isEmpty) {
+      Array.empty
+    } else {
+      NativeCore.decodeDeletions(resp.getData.toByteArray)
+    }
+  }
+
   def decodeSegmentRepLevelsColumn(
     tableName: String,
-    partition: ArrayBuffer[PartitionField],
+    partition: Map[String, PartitionFieldValue],
     segmentId: String,
+    columnName: String,
     columnMeta: ColumnMeta,
-    limit: Int = Int.MaxValue,
+    correlationId: String,
+    deletions: Array[Boolean],
   ): RepLevelsColumn[_] = {
     val rawSegmentColumn = readSegmentRawColumn(
       tableName,
       partition,
       segmentId,
+      columnName,
       columnMeta,
+      correlationId,
     )
 
-    val nRows = limit.min(rawSegmentColumn.rowCount)
     val handler = PrimitiveHandlers.getHandler(columnMeta.getDtype)
     handler.decodeRepLevelsColumn(
       columnMeta.getNestedListDepth.toByte,
       rawSegmentColumn.compressedBytes,
       rawSegmentColumn.uncompressedBytes,
-      nRows,
+      rawSegmentColumn.rowCount,
       rawSegmentColumn.codec,
+      deletions,
     )
   }
 
-  def decodeSegmentColumn(
+  private def decodeSegmentColumn(
     tableName: String,
-    partition: ArrayBuffer[PartitionField],
+    partition: Map[String, PartitionFieldValue],
     segmentId: String,
+    columnName: String,
     columnMeta: ColumnMeta,
-    limit: Int = Int.MaxValue,
+    correlationId: String,
+    deletions: Array[Boolean],
   ): ArrayBuffer[FieldValue] = {
     val rawSegmentColumn = readSegmentRawColumn(
       tableName,
       partition,
       segmentId,
+      columnName,
       columnMeta,
+      correlationId,
     )
 
-    val nRows = limit.min(rawSegmentColumn.rowCount)
     val handler = PrimitiveHandlers.getHandler(columnMeta.getDtype)
     handler.decodeFieldValues(
       columnMeta.getNestedListDepth.toByte,
       rawSegmentColumn.compressedBytes,
       rawSegmentColumn.uncompressedBytes,
-      nRows,
+      rawSegmentColumn.rowCount,
       rawSegmentColumn.codec,
+      deletions
     )
   }
 
   // this can be made faster by parallel execution of the decodeSegmentColumn calls
   def decodeSegment(
     tableName: String,
-    partition: ArrayBuffer[PartitionField],
+    partition: Map[String, PartitionFieldValue],
     segmentId: String,
-    columnMetas: Array[ColumnMeta],
+    columnMetas: Map[String, ColumnMeta],
   ): Array[Row] = {
+    val correlationId = PancakeClient.generateCorrelationId()
+
     if (columnMetas.isEmpty) {
       throw new IllegalArgumentException(s"decodeSegment requires at least one column to decode")
     }
 
-    val segmentColumns = columnMetas.map(meta => decodeSegmentColumn(tableName, partition, segmentId, meta))
-    val n = segmentColumns.map(_.length).min
+    val deletions = decodeSegmentDeletions(
+      tableName,
+      partition,
+      segmentId,
+      correlationId,
+    )
+
+    val segmentColumns = columnMetas.map({case (columnName, meta) =>
+      (
+        columnName,
+        decodeSegmentColumn(tableName, partition, segmentId, columnName, meta, correlationId, deletions)
+      )
+    })
+    val n = segmentColumns.values.map(_.length).min
     (0 until n).toArray.map(rowIdx => {
       val row = Row.newBuilder()
-      columnMetas.indices.foreach(colIdx => {
-        val field = Field
-          .newBuilder()
-          .setName(columnMetas(colIdx).getName)
-          .setValue(segmentColumns(colIdx)(rowIdx))
-        row.addFields(field)
+      segmentColumns.foreach({case (columnName, fvs) =>
+        row.putFields(columnName, fvs(rowIdx))
       })
       row.build()
     })
@@ -237,5 +296,9 @@ case class PancakeClient(host: String, port: Int) {
 }
 
 object PancakeClient {
-  val JSON_BYTE_DELIMITER: Array[Byte] = "}\n".getBytes(StandardCharsets.UTF_8)
+  private val JSON_BYTE_DELIMITER: Array[Byte] = "}\n".getBytes(StandardCharsets.UTF_8)
+
+  def generateCorrelationId(): String = {
+    UUID.randomUUID().toString
+  }
 }

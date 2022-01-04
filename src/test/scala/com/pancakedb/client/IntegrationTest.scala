@@ -1,7 +1,9 @@
 package com.pancakedb.client
 
 import com.pancakedb.client.Exceptions.HttpException
-import com.pancakedb.idl.{ColumnMeta, CreateTableRequest, DataType, DeleteFromSegmentRequest, DropTableRequest, FieldValue, ListSegmentsRequest, Row, Schema, WriteToPartitionRequest}
+import com.pancakedb.idl._
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class IntegrationTest extends TestBase {
   val TableName = "jvm_client_test_table"
@@ -10,7 +12,7 @@ class IntegrationTest extends TestBase {
     .setDtype(DataType.STRING)
     .build()
 
-  "writing data and reading it back" should "give the same result" ignore {
+  "writing data and reading it back" should "give the same result" in {
     val client = PancakeClient("localhost", 1337)
     try {
       client.Api.dropTable(DropTableRequest.newBuilder()

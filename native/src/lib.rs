@@ -122,6 +122,33 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeBools(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeFloat32s(
+  env: JNIEnv,
+  _: JClass,
+  nesting_depth: jbyte,
+  compressed_bytes: jbyteArray,
+  uncompressed_bytes: jbyteArray,
+  codec: JString,
+) -> jobject {
+  fn create_jni_array(env: &JNIEnv, atoms: &[f32]) -> jobject {
+    let java_values = env.new_float_array(atoms.len() as jsize)
+      .expect("unable to allocate java array");
+    env.set_float_array_region(java_values, 0 as jsize, atoms)
+      .expect("unable to assign to java array");
+    java_values
+  }
+  decode_column::<f32>(
+    env,
+    nesting_depth,
+    compressed_bytes,
+    uncompressed_bytes,
+    codec,
+    "com/pancakedb/client/NativeCore$FloatColumn",
+    "([F[B)V",
+    &create_jni_array,
+  )
+}
+#[no_mangle]
 pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeFloat64s(
   env: JNIEnv,
   _: JClass,

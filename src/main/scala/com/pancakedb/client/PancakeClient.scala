@@ -3,7 +3,7 @@ package com.pancakedb.client
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.{ByteString, Message, MessageOrBuilder}
 import com.pancakedb.client.Exceptions.HttpException
-import com.pancakedb.client.PancakeClient.JSON_BYTE_DELIMITER
+import com.pancakedb.client.PancakeClient.{DetailedRepLevelsColumn, JSON_BYTE_DELIMITER, generateCorrelationId}
 import com.pancakedb.idl._
 import org.apache.http.client.HttpClient
 import org.apache.http.client.methods.{HttpGet, HttpPost, RequestBuilder}
@@ -14,7 +14,10 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import scala.collection.JavaConverters._
+import scala.collection.MapLike
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 case class PancakeClient(host: String, port: Int) {
   @transient lazy val httpClient: HttpClient = {
@@ -130,7 +133,7 @@ case class PancakeClient(host: String, port: Int) {
 
   private def readSegmentRawColumn(
     tableName: String,
-    partition: Map[String, PartitionFieldValue],
+    partition: scala.collection.Map[String, PartitionFieldValue],
     segmentId: String,
     columnName: String,
     columnMeta: ColumnMeta,
@@ -178,117 +181,107 @@ case class PancakeClient(host: String, port: Int) {
     )
   }
 
-  def decodeSegmentDeletions(
+  private def decodeSegmentRepLevelsDetailed(
     tableName: String,
-    partition: Map[String, PartitionFieldValue],
+    partition: scala.collection.Map[String, PartitionFieldValue],
     segmentId: String,
-    correlationId: String,
-  ): Array[Boolean] = {
-    val req = ReadSegmentDeletionsRequest.newBuilder()
-      .setTableName(tableName)
-      .putAllPartition(partition.asJava)
-      .setSegmentId(segmentId)
-      .setCorrelationId(correlationId)
-      .build()
-    val resp = this.Api.readSegmentDeletions(req)
-    val bytes = resp.getData.toByteArray
-    // TODO get rid of this check once core library handles it instead
-    if (bytes.isEmpty) {
-      Array.empty
-    } else {
-      NativeCore.decodeDeletions(resp.getData.toByteArray)
-    }
-  }
-
-  def decodeSegmentRepLevelsColumn(
-    tableName: String,
-    partition: Map[String, PartitionFieldValue],
-    segmentId: String,
-    columnName: String,
-    columnMeta: ColumnMeta,
-    correlationId: String,
-    deletions: Array[Boolean],
-  ): RepLevelsColumn[_] = {
-    val rawSegmentColumn = readSegmentRawColumn(
-      tableName,
-      partition,
-      segmentId,
-      columnName,
-      columnMeta,
-      correlationId,
-    )
-
-    val handler = PrimitiveHandlers.getHandler(columnMeta.getDtype)
-    handler.decodeRepLevelsColumn(
-      columnMeta.getNestedListDepth.toByte,
-      rawSegmentColumn.compressedBytes,
-      rawSegmentColumn.uncompressedBytes,
-      rawSegmentColumn.rowCount,
-      rawSegmentColumn.codec,
-      deletions,
-    )
-  }
-
-  private def decodeSegmentColumn(
-    tableName: String,
-    partition: Map[String, PartitionFieldValue],
-    segmentId: String,
-    columnName: String,
-    columnMeta: ColumnMeta,
-    correlationId: String,
-    deletions: Array[Boolean],
-  ): ArrayBuffer[FieldValue] = {
-    val rawSegmentColumn = readSegmentRawColumn(
-      tableName,
-      partition,
-      segmentId,
-      columnName,
-      columnMeta,
-      correlationId,
-    )
-
-    val handler = PrimitiveHandlers.getHandler(columnMeta.getDtype)
-    handler.decodeFieldValues(
-      columnMeta.getNestedListDepth.toByte,
-      rawSegmentColumn.compressedBytes,
-      rawSegmentColumn.uncompressedBytes,
-      rawSegmentColumn.rowCount,
-      rawSegmentColumn.codec,
-      deletions
-    )
-  }
-
-  // this can be made faster by parallel execution of the decodeSegmentColumn calls
-  def decodeSegment(
-    tableName: String,
-    partition: Map[String, PartitionFieldValue],
-    segmentId: String,
-    columnMetas: Map[String, ColumnMeta],
-  ): Array[Row] = {
-    val correlationId = PancakeClient.generateCorrelationId()
-
-    if (columnMetas.isEmpty) {
+    columns: scala.collection.Map[String, ColumnMeta],
+  )(implicit ec: ExecutionContext): Map[String, DetailedRepLevelsColumn[_, _]] = {
+    if (columns.isEmpty) {
       throw new IllegalArgumentException(s"decodeSegment requires at least one column to decode")
     }
 
-    val deletions = decodeSegmentDeletions(
+    val correlationId = generateCorrelationId()
+
+    val deletionFuture = Future {
+      val req = ReadSegmentDeletionsRequest.newBuilder()
+        .setTableName(tableName)
+        .putAllPartition(partition.asJava)
+        .setSegmentId(segmentId)
+        .setCorrelationId(correlationId)
+        .build()
+      Api.readSegmentDeletions(req)
+    }
+    val columnFutures = columns.map({case (name, meta) =>
+      val future = Future {
+        readSegmentRawColumn(
+          tableName,
+          partition,
+          segmentId,
+          name,
+          meta,
+          correlationId,
+        )
+      }
+      (name, future)
+    })
+
+    val deletions = {
+      val bytes = Await.result(deletionFuture, Duration.Inf).getData.toByteArray
+      // TODO get rid of this check once core library handles it instead
+      if (bytes.isEmpty) {
+        Array.empty[Boolean]
+      } else {
+        NativeCore.decodeDeletions(bytes)
+      }
+    }
+
+    columnFutures.map({case (name, rawColumnFuture) =>
+      val rawColumn = Await.result(rawColumnFuture, Duration.Inf)
+      val meta = columns(name)
+      val handler = PrimitiveHandlers.getHandler(meta.getDtype)
+      val detailed = DetailedRepLevelsColumn.from(
+        handler,
+        meta.getNestedListDepth.toByte,
+        rawColumn.compressedBytes,
+        rawColumn.uncompressedBytes,
+        rawColumn.rowCount,
+        rawColumn.codec,
+        deletions,
+      )
+      (name, detailed)
+    }).toMap
+  }
+
+  // This returns a mid-level representation of the table.
+  // Each rep levels column may have a different number of rows.
+  def decodeSegmentRepLevelsColumns(
+    tableName: String,
+    partition: scala.collection.Map[String, PartitionFieldValue],
+    segmentId: String,
+    columns: scala.collection.Map[String, ColumnMeta],
+  )(implicit ec: ExecutionContext): Map[String, RepLevelsColumn[_]] = {
+    val detailed = decodeSegmentRepLevelsDetailed(tableName, partition, segmentId, columns)
+    detailed.mapValues(_.repLevelsColumn)
+  }
+
+  // This returns a high-level representation of the table.
+  def decodeSegment(
+    tableName: String,
+    partition: scala.collection.Map[String, PartitionFieldValue],
+    segmentId: String,
+    columns: scala.collection.Map[String, ColumnMeta],
+  )(implicit ec: ExecutionContext): Array[Row] = {
+    val repLevelsColumns = decodeSegmentRepLevelsDetailed(
       tableName,
       partition,
       segmentId,
-      correlationId,
+      columns,
     )
+    val n = repLevelsColumns
+      .values
+      .map(_.repLevelsColumn.nRows)
+      .min
 
-    val segmentColumns = columnMetas.map({case (columnName, meta) =>
-      (
-        columnName,
-        decodeSegmentColumn(tableName, partition, segmentId, columnName, meta, correlationId, deletions)
-      )
-    })
-    val n = segmentColumns.values.map(_.length).min
+    val fvColumns = repLevelsColumns
+      .map({case (name, detailed) =>
+        (name, detailed.toAtomNester.computeFieldValues(n))
+      })
+
     (0 until n).toArray.map(rowIdx => {
       val row = Row.newBuilder()
-      segmentColumns.foreach({case (columnName, fvs) =>
-        row.putFields(columnName, fvs(rowIdx))
+      fvColumns.foreach({case (name, fvs) =>
+        row.putFields(name, fvs(rowIdx))
       })
       row.build()
     })
@@ -298,7 +291,36 @@ case class PancakeClient(host: String, port: Int) {
 object PancakeClient {
   private val JSON_BYTE_DELIMITER: Array[Byte] = "}\n".getBytes(StandardCharsets.UTF_8)
 
-  def generateCorrelationId(): String = {
+  private def generateCorrelationId(): String = {
     UUID.randomUUID().toString
+  }
+
+  private case class DetailedRepLevelsColumn[A, P](
+    handler: PrimitiveHandler[A, P],
+    repLevelsColumn: RepLevelsColumn[A],
+  ) {
+    def toAtomNester: AtomNester[A, P] = AtomNester(handler, repLevelsColumn)
+  }
+
+  private object DetailedRepLevelsColumn {
+    def from[A, P](
+      handler: PrimitiveHandler[A, P],
+      nestedListDepth: Byte,
+      compressedBytes: Array[Byte],
+      uncompressedBytes: Array[Byte],
+      nRows: Int,
+      codec: String,
+      deletions: Array[Boolean],
+    ): DetailedRepLevelsColumn[A, P] = {
+      val repLevelsColumn = handler.decodeRepLevelsColumn(
+        nestedListDepth: Byte,
+        compressedBytes: Array[Byte],
+        uncompressedBytes: Array[Byte],
+        nRows: Int,
+        codec: String,
+        deletions: Array[Boolean],
+      )
+      DetailedRepLevelsColumn(handler, repLevelsColumn)
+    }
   }
 }

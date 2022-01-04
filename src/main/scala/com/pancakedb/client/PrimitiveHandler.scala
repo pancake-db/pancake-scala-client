@@ -72,7 +72,7 @@ trait PrimitiveHandler[A, P] {
     nRows: Int,
     codec: String,
     deletions: Array[Boolean],
-  )(implicit ev: ClassTag[A]): RepLevelsColumn[A] = {
+  ): RepLevelsColumn[A] = {
     val nativeColumn = decodeNativeRepLevelsColumn(
       nestedListDepth,
       compressedBytes,
@@ -99,7 +99,7 @@ trait PrimitiveHandler[A, P] {
     nRows: Int,
     codec: String,
     deletions: Array[Boolean],
-  )(implicit ev: ClassTag[A]): ArrayBuffer[FieldValue] = {
+  ): ArrayBuffer[FieldValue] = {
     val column = decodeRepLevelsColumn(
       nestedListDepth,
       compressedBytes,

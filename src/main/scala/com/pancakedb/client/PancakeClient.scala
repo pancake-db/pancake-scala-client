@@ -227,12 +227,7 @@ case class PancakeClient(host: String, port: Int) {
 
     val deletions = {
       val bytes = Await.result(deletionFuture, Duration.Inf).getData.toByteArray
-      // TODO get rid of this check once core library handles it instead
-      if (bytes.isEmpty) {
-        Array.empty[Boolean]
-      } else {
-        NativeCore.decodeDeletions(bytes)
-      }
+      NativeCore.decodeDeletions(bytes)
     }
 
     columnFutures.map({case (name, rawColumnFuture) =>

@@ -16,7 +16,7 @@ class IntegrationTest extends TestBase {
     .setDtype(DataType.BOOL)
     .build()
 
-  "writing data and reading it back" should "give the same result" in {
+  "writing data and reading it back" should "give the same result" ignore {
     val client = PancakeClient("localhost", 3841)
     try {
       client.Api.dropTable(DropTableRequest.newBuilder()

@@ -7,13 +7,17 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class IntegrationTest extends TestBase {
   val TableName = "jvm_client_test_table"
-  val ColumnName = "s"
-  val Meta: ColumnMeta = ColumnMeta.newBuilder()
+  val OrigColumnName = "s"
+  val OrigMeta: ColumnMeta = ColumnMeta.newBuilder()
     .setDtype(DataType.STRING)
+    .build()
+  val AddColumnName = "new"
+  val AddMeta: ColumnMeta = ColumnMeta.newBuilder()
+    .setDtype(DataType.BOOL)
     .build()
 
   "writing data and reading it back" should "give the same result" in {
-    val client = PancakeClient("localhost", 1337)
+    val client = PancakeClient("localhost", 3841)
     try {
       client.Api.dropTable(DropTableRequest.newBuilder()
         .setTableName(TableName)
@@ -24,7 +28,7 @@ class IntegrationTest extends TestBase {
 
     client.Api.createTable(CreateTableRequest.newBuilder()
       .setTableName(TableName)
-      .setSchema(Schema.newBuilder().putColumns(ColumnName, Meta))
+      .setSchema(Schema.newBuilder().putColumns(OrigColumnName, OrigMeta))
       .build()
     )
 
@@ -39,11 +43,17 @@ class IntegrationTest extends TestBase {
     )
     strings.foreach(s => writeReq.addRows(
       Row.newBuilder().putFields(
-        ColumnName,
+        OrigColumnName,
         FieldValue.newBuilder().setStringVal(s).build()
       ).build()
     ))
     client.Api.writeToPartition(writeReq.build())
+
+    client.Api.alterTable(AlterTableRequest.newBuilder()
+      .setTableName(TableName)
+      .putNewColumns(AddColumnName, AddMeta)
+      .build()
+    )
 
     val segment = client.Api.listSegments(ListSegmentsRequest.newBuilder()
       .setTableName(TableName)
@@ -66,8 +76,12 @@ class IntegrationTest extends TestBase {
       TableName,
       Map.empty,
       segmentId,
-      Map(ColumnName -> Meta)
+      Map(OrigColumnName -> OrigMeta, AddColumnName -> AddMeta)
     )
-    assertResult(expectedStrings)(rows.map(_.getFieldsMap.get(ColumnName).getStringVal))
+    assertResult(expectedStrings)(rows.map(_.getFieldsMap.get(OrigColumnName).getStringVal))
+    val implicitBoolFvs = rows.map(_.getFieldsMap.get(AddColumnName))
+    for (fv <- implicitBoolFvs) {
+      assertResult(FieldValue.ValueCase.VALUE_NOT_SET)(fv.getValueCase)
+    }
   }
 }

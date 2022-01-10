@@ -3,10 +3,10 @@ package com.pancakedb.client
 import com.pancakedb.idl.FieldValue
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
 
 trait PrimitiveHandler[A, P] {
-  private val NewRowRepLevels = Set(0, 1).map(_.toByte)
+  private val NullRepLevel = 0.toByte
+  private val NewRowRepLevels = Set(NullRepLevel, 1).map(_.toByte)
 
   val isAtomic: Boolean
 
@@ -21,7 +21,8 @@ trait PrimitiveHandler[A, P] {
   def filterToRepLevelsColumn(
     nativeColumn: NativeRepLevelsColumn[A],
     nestedListDepth: Byte,
-    nRows: Int,
+    rowCount: Int,
+    implicitNullsCount: Int,
     deletions: Array[Boolean],
   ): RepLevelsColumn[A] = {
     val atomRepLevel = nestedListDepth + (if (isAtomic) 1 else 2)
@@ -31,7 +32,17 @@ trait PrimitiveHandler[A, P] {
     var atomIdx = 0
     var rowIdx = 0
     var count = 0
-    while (count < nRows) {
+    // first account for implicit nulls
+    while (rowIdx < implicitNullsCount) {
+      val notDeleted = rowIdx >= deletions.length || !deletions(rowIdx)
+      if (notDeleted) {
+        filteredRepLevels += NullRepLevel
+        count += 1
+      }
+      rowIdx += 1
+    }
+    // then account for explicit data
+    while (count < rowCount) {
       var rowFinished = false
       val notDeleted = rowIdx >= deletions.length || !deletions(rowIdx)
       while (!rowFinished) {
@@ -61,25 +72,22 @@ trait PrimitiveHandler[A, P] {
       makeAtomArray(filteredAtoms),
       filteredRepLevels.toArray,
       nestedListDepth,
-      nRows
+      rowCount
     )
   }
 
   def decodeRepLevelsColumn(
-    nestedListDepth: Byte,
-    compressedBytes: Array[Byte],
-    uncompressedBytes: Array[Byte],
-    nRows: Int,
-    codec: String,
+    rawColumn: RawColumn,
     deletions: Array[Boolean],
   ): RepLevelsColumn[A] = {
+    val nestedListDepth = rawColumn.columnMeta.getNestedListDepth.toByte
     val nativeColumn = decodeNativeRepLevelsColumn(
       nestedListDepth,
-      compressedBytes,
-      uncompressedBytes,
-      codec,
+      rawColumn.compressedBytes,
+      rawColumn.uncompressedBytes,
+      rawColumn.codec,
     )
-    filterToRepLevelsColumn(nativeColumn, nestedListDepth, nRows, deletions)
+    filterToRepLevelsColumn(nativeColumn, nestedListDepth, rawColumn.rowCount, rawColumn.implicitNullsCount, deletions)
   }
 
   def atomToPrimitive(atom: A): P = {
@@ -93,22 +101,14 @@ trait PrimitiveHandler[A, P] {
   def setValue(p: P, builder: FieldValue.Builder): Unit
 
   def decodeFieldValues(
-    nestedListDepth: Byte,
-    compressedBytes: Array[Byte],
-    uncompressedBytes: Array[Byte],
-    nRows: Int,
-    codec: String,
+    rawColumn: RawColumn,
     deletions: Array[Boolean],
   ): ArrayBuffer[FieldValue] = {
     val column = decodeRepLevelsColumn(
-      nestedListDepth,
-      compressedBytes,
-      uncompressedBytes,
-      nRows,
-      codec,
-      deletions
+      rawColumn,
+      deletions,
     )
-    AtomNester(this, column).computeFieldValues(nRows)
+    AtomNester(this, column).computeFieldValues(rawColumn.rowCount)
   }
 
   def makeAtomArray(buffer: ArrayBuffer[A]): Array[A]

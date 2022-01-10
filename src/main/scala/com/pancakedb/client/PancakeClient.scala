@@ -2,7 +2,7 @@ package com.pancakedb.client
 
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.{ByteString, Message, MessageOrBuilder}
-import com.pancakedb.client.Exceptions.HttpException
+import com.pancakedb.client.Exceptions.{CorruptDataException, HttpException}
 import com.pancakedb.client.PancakeClient.{DetailedRepLevelsColumn, JSON_BYTE_DELIMITER, generateCorrelationId}
 import com.pancakedb.idl._
 import org.apache.http.client.HttpClient
@@ -144,6 +144,7 @@ case class PancakeClient(host: String, port: Int) {
 
     var rowCount = 0
     var codec = ""
+    var implicitNullsCount = 0
     val uncompressedBytes = ArrayBuffer.empty[Byte]
     val compressedBytes = ArrayBuffer.empty[Byte]
 
@@ -160,8 +161,15 @@ case class PancakeClient(host: String, port: Int) {
 
       if (first) {
         rowCount = resp.getRowCount
+        implicitNullsCount = resp.getImplicitNullsCount
       }
       if (resp.getCodec.nonEmpty) {
+        if (resp.getImplicitNullsCount > 0) {
+          throw CorruptDataException(
+            s"""contradictory response for $tableName $segmentId $columnName
+            contains both compacted data and implicit nulls"""
+          )
+        }
         codec = resp.getCodec
         compressedBytes ++= resp.getData.toByteArray
       } else {
@@ -174,6 +182,7 @@ case class PancakeClient(host: String, port: Int) {
 
     RawColumn(
       rowCount,
+      implicitNullsCount,
       uncompressedBytes.toArray,
       compressedBytes.toArray,
       columnMeta,
@@ -232,11 +241,7 @@ case class PancakeClient(host: String, port: Int) {
       val handler = PrimitiveHandlers.getHandler(meta.getDtype)
       val detailed = DetailedRepLevelsColumn.from(
         handler,
-        meta.getNestedListDepth.toByte,
-        rawColumn.compressedBytes,
-        rawColumn.uncompressedBytes,
-        rawColumn.rowCount,
-        rawColumn.codec,
+        rawColumn,
         deletions,
       )
       (name, detailed)
@@ -305,20 +310,12 @@ object PancakeClient {
   private object DetailedRepLevelsColumn {
     def from[A, P](
       handler: PrimitiveHandler[A, P],
-      nestedListDepth: Byte,
-      compressedBytes: Array[Byte],
-      uncompressedBytes: Array[Byte],
-      nRows: Int,
-      codec: String,
+      rawColumn: RawColumn,
       deletions: Array[Boolean],
     ): DetailedRepLevelsColumn[A, P] = {
       val repLevelsColumn = handler.decodeRepLevelsColumn(
-        nestedListDepth: Byte,
-        compressedBytes: Array[Byte],
-        uncompressedBytes: Array[Byte],
-        nRows: Int,
-        codec: String,
-        deletions: Array[Boolean],
+        rawColumn,
+        deletions,
       )
       DetailedRepLevelsColumn(handler, repLevelsColumn)
     }

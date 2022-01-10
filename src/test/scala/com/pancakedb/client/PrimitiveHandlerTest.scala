@@ -19,14 +19,15 @@ class PrimitiveHandlerTest extends TestBase {
     val result = BoolHandler.filterToRepLevelsColumn(
       nativeCol,
       1,
-      3,
-      Array(false, true, true, false, false),
+      4,
+      implicitNullsCount = 2,
+      deletions = Array(true, false, false, true, true), // first 2 apply to implicit nulls, last 3 explicit
     )
     val expected  = RepLevelsColumn[Boolean](
       Array(false, true),
-      Array(2, 1, 2, 1, 0),
+      Array(0, 2, 1, 2, 1, 0),
       1,
-      3,
+      4,
     )
     assertRepLevelsEq(expected, result)
   }
@@ -40,7 +41,8 @@ class PrimitiveHandlerTest extends TestBase {
       nativeCol,
       0,
       3,
-      Array(false, true, true, false, false),
+      implicitNullsCount = 0,
+      deletions = Array(false, true, true, false, false),
     )
     val expected  = RepLevelsColumn[Byte](
       Array(97, 100),

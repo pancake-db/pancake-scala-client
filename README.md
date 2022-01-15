@@ -19,7 +19,7 @@ Therefore you will need to run on one of them:
 or compile your native binary and include it in your `resources/native/$ARCHITECTURE-$OS/libpancake_scala_client_native.$SUFFIX`.
 
 You can add this client to your `build.sbt` or equivalent via something like
-`libraryDependencies += "com.pancakedb" %% "pancake-db-client" % "0.0.0-alpha.0-full"`
+`libraryDependencies += "com.pancakedb" %% "pancake-db-client" % <version>`
 
 ## Creating a Client
 

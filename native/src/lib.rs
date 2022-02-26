@@ -1,12 +1,12 @@
 use jni::JNIEnv;
 use jni::objects::{JClass, JString, JValue};
-use jni::sys::{jbyte, jbooleanArray, jbyteArray, jobject, jsize};
+use jni::sys::{jbooleanArray, jbyte, jbyteArray, jobject, jsize};
 use pancake_db_core::{RepLevelsAndAtoms, RepLevelsAndBytes};
 use pancake_db_core::compression::ValueCodec;
+use pancake_db_core::deletion::decompress_deletions;
 use pancake_db_core::encoding::{Decoder, DecoderImpl};
 use pancake_db_core::primitives::Primitive;
-use q_compress::TimestampMicros;
-use pancake_db_core::deletion::decompress_deletions;
+use q_compress::data_types::TimestampMicros;
 
 fn decode_column<P: Primitive>(
   env: JNIEnv,
@@ -29,7 +29,7 @@ fn decode_column<P: Primitive>(
     let decompressor = P::new_codec(&codec)
       .expect("invalid codec for data type");
 
-    let RepLevelsAndBytes { remaining_bytes: bytes, levels } = decompressor.decompress_rep_levels(bytes)
+    let RepLevelsAndBytes { remaining_bytes: bytes, levels } = decompressor.decompress_rep_levels(&bytes)
       .expect("unable to decompress repetition levels");
 
     atoms.extend(decompressor.decompress_atoms(&bytes)
@@ -262,7 +262,7 @@ pub extern "system" fn Java_com_pancakedb_client_NativeCore_00024_decodeDeletion
   let bytes = env.convert_byte_array(data)
     .unwrap();
 
-  let deletions_as_bytes: Vec<_> = decompress_deletions(bytes)
+  let deletions_as_bytes: Vec<_> = decompress_deletions(&bytes)
     .expect("corrupt deletion data")
     .iter()
     .map(|&b| b as u8)

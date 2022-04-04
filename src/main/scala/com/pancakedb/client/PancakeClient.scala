@@ -1,26 +1,17 @@
 package com.pancakedb.client
 
-import com.google.common.util.concurrent.ListenableFuture
-import com.google.protobuf.util.JsonFormat
-import com.google.protobuf.{ByteString, Message, MessageOrBuilder}
-import com.pancakedb.client.Exceptions.{CorruptDataException, HttpException}
-import com.pancakedb.client.PancakeClient.{DetailedRepLevelsColumn, JSON_BYTE_DELIMITER, generateCorrelationId}
+import com.pancakedb.client.Exceptions.CorruptDataException
+import com.pancakedb.client.PancakeClient.{DetailedRepLevelsColumn, generateCorrelationId}
 import com.pancakedb.idl._
 import io.grpc.stub.StreamObserver
-import io.grpc.{Channel, ManagedChannel, ManagedChannelBuilder}
-import org.apache.http.client.HttpClient
-import org.apache.http.client.methods.{HttpGet, HttpPost, RequestBuilder}
-import org.apache.http.entity.{ContentType, StringEntity}
-import org.apache.http.impl.client.HttpClientBuilder
+import io.grpc.{Channel, ManagedChannelBuilder}
 
-import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.util.{Failure, Success, Try}
 
 case class PancakeClient(host: String, port: Int) {
   @transient private lazy val channel: Channel = {

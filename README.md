@@ -27,8 +27,8 @@ Create a client instance via something like:
 ```scala
 import com.pancakedb.client.PancakeClient
 val client = PancakeClient(
-  "127.0.0.1",
-  3842, // the port PancakeDB GRPC is running on
+  host = "127.0.0.1",
+  port = 3842,
 )
 ```
 

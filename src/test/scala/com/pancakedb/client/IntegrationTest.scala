@@ -1,7 +1,7 @@
 package com.pancakedb.client
 
-import com.pancakedb.client.Exceptions.HttpException
 import com.pancakedb.idl._
+import io.grpc.StatusRuntimeException
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -17,20 +17,21 @@ class IntegrationTest extends TestBase {
     .build()
 
   "writing data and reading it back" should "give the same result" ignore {
-    val client = PancakeClient("localhost", 3841)
+    val client = PancakeClient("localhost", 3842)
     try {
-      client.Api.dropTable(DropTableRequest.newBuilder()
+      client.grpc.dropTable(DropTableRequest.newBuilder()
         .setTableName(TableName)
-        .build())
+        .build()
+      ).get()
     } catch {
-      case HttpException(404, _) =>
+      case e: StatusRuntimeException if e.getStatus.getCode.value() == 404 =>
     }
 
-    client.Api.createTable(CreateTableRequest.newBuilder()
+    client.grpc.createTable(CreateTableRequest.newBuilder()
       .setTableName(TableName)
       .setSchema(Schema.newBuilder().putColumns(OrigColumnName, OrigMeta))
       .build()
-    )
+    ).get()
 
     val writeReq = WriteToPartitionRequest.newBuilder()
       .setTableName(TableName)
@@ -47,29 +48,29 @@ class IntegrationTest extends TestBase {
         FieldValue.newBuilder().setStringVal(s).build()
       ).build()
     ))
-    client.Api.writeToPartition(writeReq.build())
+    client.grpc.writeToPartition(writeReq.build()).get()
 
-    client.Api.alterTable(AlterTableRequest.newBuilder()
+    client.grpc.alterTable(AlterTableRequest.newBuilder()
       .setTableName(TableName)
       .putNewColumns(AddColumnName, AddMeta)
       .build()
-    )
+    ).get()
 
-    val segment = client.Api.listSegments(ListSegmentsRequest.newBuilder()
+    val segment = client.grpc.listSegments(ListSegmentsRequest.newBuilder()
       .setTableName(TableName)
       .setIncludeMetadata(true)
       .build()
-    ).getSegments(0)
+    ).get().getSegments(0)
     assertResult(strings.length)(segment.getMetadata.getRowCount)
 
     val segmentId = segment.getSegmentId
-    client.Api.deleteFromSegment(DeleteFromSegmentRequest.newBuilder()
+    client.grpc.deleteFromSegment(DeleteFromSegmentRequest.newBuilder()
       .setTableName(TableName)
       .setSegmentId(segmentId)
       .addRowIds(0)
       .addRowIds(2)
       .build()
-    )
+    ).get()
 
     val expectedStrings = Array("bc", "")
     val rows = client.decodeSegment(

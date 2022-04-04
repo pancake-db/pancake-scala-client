@@ -138,9 +138,9 @@ checksum = "9d5ef59c35c7472ce5e1b6c5924b87585143d1fc2cf39eae0009bba6c4df62f1"
 
 [[package]]
 name = "q_compress"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95e8bd2f301b27c44c2bef1302168bc400c6fe530ed0355cf04501e34bbe256b"
+checksum = "3dd92d0a3e31e816030c5b7bf765ba53ae22b9346347e5cece9eaacd448d87aa"
 
 [[package]]
 name = "quote"

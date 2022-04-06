@@ -1,6 +1,7 @@
 package com.pancakedb.client
 
 import com.pancakedb.idl._
+import io.grpc.Status.Code
 import io.grpc.StatusRuntimeException
 
 import java.util.concurrent.ExecutionException
@@ -25,7 +26,7 @@ class IntegrationTest extends TestBase {
         .build()
       ).get()
     } catch {
-      case e: StatusRuntimeException if e.getStatus.getCode.value() == 404 =>
+      case e: StatusRuntimeException if e.getStatus.getCode == Code.NOT_FOUND =>
     }
 
     client.grpc.createTable(CreateTableRequest.newBuilder()

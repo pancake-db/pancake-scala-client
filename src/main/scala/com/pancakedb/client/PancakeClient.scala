@@ -4,17 +4,17 @@ import com.pancakedb.client.Exceptions.CorruptDataException
 import com.pancakedb.client.PancakeClient.{DetailedRepLevelsColumn, generateCorrelationId}
 import com.pancakedb.idl._
 import io.grpc.stub.StreamObserver
-import io.grpc.{Channel, ManagedChannelBuilder}
+import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 
-import java.nio.charset.StandardCharsets
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.language.existentials
 
 case class PancakeClient(host: String, port: Int) {
-  @transient private lazy val channel: Channel = {
+  @transient private lazy val channel: ManagedChannel = {
     val builder = ManagedChannelBuilder
       .forAddress(host, port)
     builder.usePlaintext()
@@ -186,11 +186,13 @@ case class PancakeClient(host: String, port: Int) {
       row.build()
     })
   }
+
+  def shutdown(): Unit = {
+    channel.shutdown()
+  }
 }
 
 object PancakeClient {
-  private val JSON_BYTE_DELIMITER: Array[Byte] = "}\n".getBytes(StandardCharsets.UTF_8)
-
   private def generateCorrelationId(): String = {
     UUID.randomUUID().toString
   }

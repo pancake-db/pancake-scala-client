@@ -1,8 +1,10 @@
 package com.pancakedb.client
 
 import com.pancakedb.idl._
+import io.grpc.Status.Code
 import io.grpc.StatusRuntimeException
 
+import java.util.concurrent.ExecutionException
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class IntegrationTest extends TestBase {
@@ -16,7 +18,7 @@ class IntegrationTest extends TestBase {
     .setDtype(DataType.BOOL)
     .build()
 
-  "writing data and reading it back" should "give the same result" ignore {
+  "writing data and reading it back" should "give the same result" in {
     val client = PancakeClient("localhost", 3842)
     try {
       client.grpc.dropTable(DropTableRequest.newBuilder()
@@ -24,7 +26,7 @@ class IntegrationTest extends TestBase {
         .build()
       ).get()
     } catch {
-      case e: StatusRuntimeException if e.getStatus.getCode.value() == 404 =>
+      case e: StatusRuntimeException if e.getStatus.getCode == Code.NOT_FOUND =>
     }
 
     client.grpc.createTable(CreateTableRequest.newBuilder()
@@ -83,6 +85,13 @@ class IntegrationTest extends TestBase {
     val implicitBoolFvs = rows.map(_.getFieldsMap.get(AddColumnName))
     for (fv <- implicitBoolFvs) {
       assertResult(FieldValue.ValueCase.VALUE_NOT_SET)(fv.getValueCase)
+    }
+
+    client.shutdown()
+
+    // now that the client is shutdown, expect failures
+    assertThrows[ExecutionException] {
+      client.grpc.writeToPartition(writeReq.build()).get()
     }
   }
 }

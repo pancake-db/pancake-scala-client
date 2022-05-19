@@ -7,10 +7,13 @@ include = ["src"]
 
 [dependencies]
 jni = "0.19"
-pancake-db-idl = "0.1.0"
-pancake-db-core = "0.1.2"
-protobuf = "=3.0.0-alpha.2"
+pancake-db-idl = "0.2.0"
+pancake-db-core = "0.2.0"
 q_compress = "0.9.1"
 
 [lib]
 crate-type = ["cdylib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
